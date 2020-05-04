@@ -301,16 +301,23 @@ class MediaStreamHandler : EventChannel.StreamHandler {
     private var callback = object: RemoteMediaClient.Callback() {
       override fun onStatusUpdated() {
         val metadata = remoteMediaClient?.mediaInfo?.metadata
-      // if (call.argument("type") as? Int == MediaMetadata.MEDIA_TYPE_TV_SHOW)
+        val activeTrackIds = remoteMediaClient?.mediaStatus?.activeTrackIds
+
         eventSink?.success(if (metadata != null) mapOf(
           "episode" to metadata?.getInt(MediaMetadata.KEY_EPISODE_NUMBER),
           "images" to metadata?.images?.map { it.url.toString() },
           "season" to metadata?.getInt(MediaMetadata.KEY_SEASON_NUMBER),
           "seriesTitle" to metadata?.getString(MediaMetadata.KEY_SERIES_TITLE),
-          "subtitles" to remoteMediaClient?.mediaInfo?.mediaTracks?
-            .filter { it.type == MediaTrack.TYPE_TEXT }
-            .map {
-              mapOf("id" to it.id, "name" to it.name, "lang" to it.language, "url" to it.contentId)
+          "subtitles" to remoteMediaClient?.mediaInfo?.mediaTracks
+            ?.filter { it.type == MediaTrack.TYPE_TEXT }
+            ?.map {
+              mapOf(
+                "id" to it.id,
+                "name" to it.name,
+                "lang" to it.language,
+                "url" to it.contentId,
+                "active" to if (activeTrackIds != null && it.id != null) activeTrackIds?.contains(it.id as Long) else false
+              )
             },
           "title" to metadata?.getString(MediaMetadata.KEY_TITLE),
           "type" to metadata?.getMediaType(),

@@ -76,6 +76,12 @@ class MediaInfo {
 
 class TextTrack {
   int id;
+  /// tells if the track is active
+  ///
+  /// This is a read-only property, setting its value to true
+  /// will not enable the subtitles on the cast device.
+  /// Please use the `activeSubtitles()` method.
+  bool active;
   String lang;
   String name;
   Uri url;
@@ -84,6 +90,7 @@ class TextTrack {
 
   TextTrack.fromMap(Map<String, dynamic> data) {
     this.id = data['id'] as int;
+    this.active = data['active'];
     this.lang = data['lang'];
     this.name = data['name'];
     this.url = data['url'] != null
@@ -93,6 +100,7 @@ class TextTrack {
 
   Map<String, dynamic> toMap() => {
       'id': this.id,
+      'active': this.active,
       'lang': this.lang,
       'name': this.name,
       'url': this.url.toString()
