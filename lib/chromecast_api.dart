@@ -8,11 +8,11 @@ class ChromecastApi {
 
   // Methods
 
+  /// Activate a subtitles track on a cast device
+  ///
+  /// [id] The ID of the TextTrack. If the value is `null` or <= 0
+  /// all the tracks will be disabled
   static Future<void> activateSubtitles(int id) async {
-    if (id == null || id <= 0) {
-      print('ID must be a positive number');
-      return;
-    }
     return await _channel.invokeMethod('activateSubtitles', id);
   }
 

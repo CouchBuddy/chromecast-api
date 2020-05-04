@@ -191,13 +191,15 @@ class ChromecastApiPlugin: FlutterPlugin, ActivityAware, MethodCallHandler {
     }
   }
 
-  private fun activateSubtitles(subsId: Long) {
-      val remoteMediaClient: RemoteMediaClient = castContext?.sessionManager?.currentCastSession!!.remoteMediaClient
-      remoteMediaClient.setActiveMediaTracks(longArrayOf(subsId))
-          .setResultCallback { mediaChannelResult: RemoteMediaClient.MediaChannelResult ->
-          if (!mediaChannelResult.status.isSuccess) {
-              println("Failed to activate subtitles: ${mediaChannelResult.status.statusCode}")
-          }
+  private fun activateSubtitles(subsId: Long?) {
+    val remoteMediaClient: RemoteMediaClient = castContext?.sessionManager?.currentCastSession!!.remoteMediaClient
+    remoteMediaClient.setActiveMediaTracks(
+      if (subsId != null && subsId > 0) longArrayOf(subsId) else longArrayOf()
+    )
+      .setResultCallback { mediaChannelResult: RemoteMediaClient.MediaChannelResult ->
+        if (!mediaChannelResult.status.isSuccess) {
+          println("Failed to activate subtitles: ${mediaChannelResult.status.statusCode}")
+        }
       }
   }
 
