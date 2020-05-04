@@ -14,7 +14,7 @@ class MediaRouteBloc extends Bloc<MediaRouteEvent, MediaRouteState> {
   var debugMode = true;
 
   MediaRouteBloc() {
-    ChromecastApi.castEventStream().listen(
+    ChromecastApi.castEventStream.listen(
       (event) {
         _printD("MediaRouteBloc listen state changed: $event");
         if (event is int) {

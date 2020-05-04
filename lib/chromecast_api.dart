@@ -6,26 +6,32 @@ class ChromecastApi {
   static const MethodChannel _channel =
     const MethodChannel('chromecast_api');
 
+  // Methods
+
   static Future<void> activateSubtitles(int id) async {
+    if (id == null || id <= 0) {
+      print('ID must be a positive number');
+      return;
+    }
     return await _channel.invokeMethod('activateSubtitles', id);
   }
 
-  static Future<void> loadMedia(MediaInfo mediaInfo) async {
-    return await _channel.invokeMethod('loadMedia', mediaInfo.toMap());
-  }
+  static Future<void> loadMedia(MediaInfo mediaInfo) async =>
+    await _channel.invokeMethod('loadMedia', mediaInfo.toMap());
+
+  static Future<void> playOrPause() async =>
+    await _channel.invokeMethod('playOrPause');
 
   static Future<void> showCastDialog() async =>
     await _channel.invokeMethod('showCastDialog');
 
-  static const EventChannel _castEventChannel =
-    const EventChannel('cast_state_event');
+  // Event Listeners
 
-  static Stream<dynamic> castEventStream() => _castEventChannel.receiveBroadcastStream();
+  static const EventChannel _castEventChannel = const EventChannel('cast_state_event');
+  static Stream<dynamic> castEventStream = _castEventChannel.receiveBroadcastStream();
 
-  static const EventChannel _mediaEventChannel =
-    const EventChannel('media_state_event');
-
-  static Stream<dynamic> mediaEventStream() => _mediaEventChannel.receiveBroadcastStream();
+  static const EventChannel _mediaEventChannel = const EventChannel('media_state_event');
+  static Stream<dynamic> mediaEventStream = _mediaEventChannel.receiveBroadcastStream();
 }
 
 class MediaInfo {
@@ -37,9 +43,24 @@ class MediaInfo {
   String title;
   Uri url;
 
-  final MediaMetadataType type;
+  MediaMetadataType type;
 
   MediaInfo(this.type);
+
+  MediaInfo.fromMap(Map<String, dynamic> data) {
+    this.episode = data['episode'] as int;
+    this.images = data['images'] != null
+      ? data['images'].map<Uri>((url) => Uri.parse(url)).toList()
+      : [];
+    this.season = data['season'] as int;
+    this.seriesTitle = data['seriesTitle'];
+    this.subtitles = data['subtitles'] != null
+      ? data['subtitles'].map<TextTrack>((subs) => TextTrack.fromMap(subs)).toList()
+      : [];
+    this.title = data['title'];
+    this.url = Uri.parse(data['url']);
+    this.type = MediaMetadataType.values[data['type'] as int];
+  }
 
   Map<String, dynamic> toMap() => {
       'episode': this.episode != null && this.episode > 0 ? this.episode : null,
@@ -58,6 +79,15 @@ class TextTrack {
   String lang;
   String name;
   Uri url;
+
+  TextTrack();
+
+  TextTrack.fromMap(Map<String, dynamic> data) {
+    this.id = data['id'] as int;
+    this.lang = data['lang'];
+    this.name = data['name'];
+    this.url = Uri.parse(data['url']);
+  }
 
   Map<String, dynamic> toMap() => {
       'id': this.id,

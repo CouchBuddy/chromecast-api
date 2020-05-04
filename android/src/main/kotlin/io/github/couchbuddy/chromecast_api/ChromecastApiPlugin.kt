@@ -6,11 +6,15 @@ import androidx.annotation.NonNull
 import androidx.mediarouter.app.MediaRouteChooserDialog
 import androidx.mediarouter.app.MediaRouteControllerDialog
 import com.google.android.gms.cast.framework.CastContext
+import com.google.android.gms.cast.framework.CastSession
 import com.google.android.gms.cast.framework.CastState
 import com.google.android.gms.cast.framework.CastStateListener
+import com.google.android.gms.cast.framework.Session
+import com.google.android.gms.cast.framework.SessionManagerListener
 import com.google.android.gms.cast.MediaInfo
 import com.google.android.gms.cast.MediaLoadRequestData
 import com.google.android.gms.cast.MediaMetadata
+import com.google.android.gms.cast.MediaStatus
 import com.google.android.gms.cast.MediaTrack
 import com.google.android.gms.cast.RemoteMediaPlayer
 import com.google.android.gms.cast.framework.media.RemoteMediaClient
@@ -32,9 +36,9 @@ var castStreamHandler: CastStreamHandler? = null
 var mediaStreamHandler: MediaStreamHandler? = null
 
 /** ChromecastApiPlugin */
-public class ChromecastApiPlugin: FlutterPlugin, ActivityAware, MethodCallHandler {
+class ChromecastApiPlugin: FlutterPlugin, ActivityAware, MethodCallHandler {
   override fun onAttachedToEngine(@NonNull flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
-    context = flutterPluginBinding.getApplicationContext()
+    context = flutterPluginBinding.applicationContext
 
     val channel = MethodChannel(flutterPluginBinding.getFlutterEngine().getDartExecutor(), "chromecast_api")
     channel.setMethodCallHandler(ChromecastApiPlugin());
@@ -52,28 +56,27 @@ public class ChromecastApiPlugin: FlutterPlugin, ActivityAware, MethodCallHandle
   }
 
   override fun onAttachedToActivity(activityPluginBinding: ActivityPluginBinding) {
-    context = activityPluginBinding.getActivity()
+    context = activityPluginBinding.activity
 
     castStreamHandler?.updateState()
     mediaStreamHandler?.updateState()
+    mediaStreamHandler?.addSessionManagerListener()
   }
 
   override fun onDetachedFromActivityForConfigChanges() {
-    // TODO: the Activity your plugin was attached to was
-    // destroyed to change configuration.
-    // This call will be followed by onReattachedToActivityForConfigChanges().
+    mediaStreamHandler?.removeSessionManagerListener()
   }
 
   override fun onReattachedToActivityForConfigChanges(activityPluginBinding: ActivityPluginBinding) {
-    context = activityPluginBinding.getActivity()
+    context = activityPluginBinding.activity
 
     castStreamHandler?.updateState()
     mediaStreamHandler?.updateState()
+    mediaStreamHandler?.addSessionManagerListener()
   }
 
   override fun onDetachedFromActivity() {
-    // TODO: your plugin is no longer associated with an Activity.
-    // Clean up references.
+    mediaStreamHandler?.removeSessionManagerListener()
   }
 
   // This static function is optional and equivalent to onAttachedToEngine. It supports the old
@@ -107,6 +110,7 @@ public class ChromecastApiPlugin: FlutterPlugin, ActivityAware, MethodCallHandle
     when (call.method) {
       "activateSubtitles" -> activateSubtitles((call.arguments() as Int).toLong())
       "loadMedia" -> loadMedia(call)
+      "playOrPause" -> playOrPause()
       "showCastDialog" -> showCastDialog()
       else -> result.notImplemented()
     }
@@ -135,7 +139,7 @@ public class ChromecastApiPlugin: FlutterPlugin, ActivityAware, MethodCallHandle
   }
 
   private fun loadMedia(call: MethodCall) {
-      val movieMetadata: MediaMetadata = MediaMetadata(call.argument("type") ?: 0)
+      val movieMetadata = MediaMetadata(call.argument("type") ?: 0)
 
       movieMetadata.putString(MediaMetadata.KEY_TITLE, call.argument("title"))
 
@@ -148,7 +152,7 @@ public class ChromecastApiPlugin: FlutterPlugin, ActivityAware, MethodCallHandle
       val images: ArrayList<String>? = call.argument("images")
       images?.map { movieMetadata.addImage(WebImage(Uri.parse(it))) }
 
-      val tracks: ArrayList<MediaTrack> = ArrayList<MediaTrack>()
+      val tracks: ArrayList<MediaTrack> = ArrayList()
 
       val subtitles: ArrayList<Map<String, Any>>? = call.argument("subtitles")
       subtitles?.forEach {
@@ -172,18 +176,27 @@ public class ChromecastApiPlugin: FlutterPlugin, ActivityAware, MethodCallHandle
       val remoteMediaClient: RemoteMediaClient = castContext?.sessionManager?.currentCastSession!!.remoteMediaClient
       val mediaRequest: MediaLoadRequestData = MediaLoadRequestData.Builder()
           .setMediaInfo(mediaInfo)
-          .setActiveTrackIds(if (!subtitles.isNullOrEmpty()) longArrayOf((subtitles[0]["id"] as Int).toLong() ?: 0) else longArrayOf())
+          .setActiveTrackIds(if (!subtitles.isNullOrEmpty()) longArrayOf((subtitles[0]["id"] as Int).toLong()) else longArrayOf())
           .build()
 
       remoteMediaClient.load(mediaRequest)
   }
 
+  private fun playOrPause () {
+    val remoteMediaClient: RemoteMediaClient = castContext?.sessionManager?.currentCastSession!!.remoteMediaClient
+
+    when (remoteMediaClient.playerState) {
+      MediaStatus.PLAYER_STATE_PAUSED -> remoteMediaClient.play()
+      MediaStatus.PLAYER_STATE_PLAYING -> remoteMediaClient.pause()
+    }
+  }
+
   private fun activateSubtitles(subsId: Long) {
       val remoteMediaClient: RemoteMediaClient = castContext?.sessionManager?.currentCastSession!!.remoteMediaClient
       remoteMediaClient.setActiveMediaTracks(longArrayOf(subsId))
-          .setResultCallback() { mediaChannelResult: RemoteMediaClient.MediaChannelResult ->
-          if (!mediaChannelResult.getStatus().isSuccess()) {
-              println("Failed to activate subtitles: ${mediaChannelResult.getStatus().getStatusCode()}")
+          .setResultCallback { mediaChannelResult: RemoteMediaClient.MediaChannelResult ->
+          if (!mediaChannelResult.status.isSuccess) {
+              println("Failed to activate subtitles: ${mediaChannelResult.status.statusCode}")
           }
       }
   }
@@ -228,7 +241,7 @@ class CastStreamHandler : EventChannel.StreamHandler {
 
 class MediaStreamHandler : EventChannel.StreamHandler {
 
-    private var lastState: MediaInfo? = null
+    private var lastState: Map<String, Any>? = null
     private var eventSink: EventChannel.EventSink? = null
 
     private val castContext: CastContext?
@@ -238,24 +251,78 @@ class MediaStreamHandler : EventChannel.StreamHandler {
         null
       }
 
+    private var sessionManagerListener = object: SessionManagerListener<Session> {
+      override fun onSessionStarting(session: Session) {
+      }
+
+      override fun onSessionStarted(session: Session, sessionId: String) {
+        if (castContext?.sessionManager?.currentCastSession != null) {
+          remoteMediaClient = castContext?.sessionManager?.currentCastSession!!.remoteMediaClient
+          remoteMediaClient?.registerCallback(callback)
+        }
+      }
+
+      override fun onSessionStartFailed(session: Session, err: Int) {
+      }
+
+      override fun onSessionResuming(session: Session, p1: String) {
+      }
+
+      override fun onSessionResumed(session: Session, wasSuspended: Boolean) {
+        if (castContext?.sessionManager?.currentCastSession != null) {
+          remoteMediaClient = castContext?.sessionManager?.currentCastSession!!.remoteMediaClient
+          remoteMediaClient?.registerCallback(callback)
+        }
+      }
+
+      override fun onSessionResumeFailed(p0: Session, p1: Int) {
+      }
+
+      override fun onSessionSuspended(p0: Session, p1: Int) {
+      }
+
+      override fun onSessionEnded(session: Session, error: Int) {
+      }
+
+      override fun onSessionEnding(session: Session) {
+      }
+    }
+
+    fun addSessionManagerListener() {
+      castContext?.sessionManager!!.addSessionManagerListener(sessionManagerListener)
+    }
+
+    fun removeSessionManagerListener() {
+      castContext?.sessionManager!!.removeSessionManagerListener(sessionManagerListener)
+    }
+
     private var remoteMediaClient: RemoteMediaClient? = null
 
     private var callback = object: RemoteMediaClient.Callback() {
       override fun onStatusUpdated() {
-        lastState = remoteMediaClient?.getMediaInfo()
-        eventSink?.success(lastState)
-        println("Status updated: ${lastState?.getContentId()}");
+        val metadata = remoteMediaClient?.mediaInfo?.metadata
+      // if (call.argument("type") as? Int == MediaMetadata.MEDIA_TYPE_TV_SHOW)
+        eventSink?.success(if (metadata != null) mapOf(
+          "episode" to metadata?.getInt(MediaMetadata.KEY_EPISODE_NUMBER),
+          "images" to metadata?.images?.map { it.url.toString() },
+          "season" to metadata?.getInt(MediaMetadata.KEY_SEASON_NUMBER),
+          "seriesTitle" to metadata?.getString(MediaMetadata.KEY_SERIES_TITLE),
+          "subtitles" to remoteMediaClient?.mediaInfo?.mediaTracks?.map {
+            mapOf("id" to it.id, "name" to it.name, "lang" to it.language)
+          },
+          "title" to metadata?.getString(MediaMetadata.KEY_TITLE),
+          "type" to metadata?.getMediaType(),
+          "url" to remoteMediaClient?.mediaInfo?.contentId
+        ) else null)
       }
     }
 
     override fun onListen(p0: Any?, sink: EventChannel.EventSink?) {
+      eventSink = sink
+
       if (castContext?.sessionManager?.currentCastSession != null) {
         remoteMediaClient = castContext?.sessionManager?.currentCastSession!!.remoteMediaClient
-
-        eventSink = sink
         remoteMediaClient?.registerCallback(callback)
-        lastState = remoteMediaClient?.getMediaInfo()
-        eventSink?.success(lastState)
       }
     }
 
@@ -267,7 +334,7 @@ class MediaStreamHandler : EventChannel.StreamHandler {
     }
 
     fun updateState() {
-      lastState = remoteMediaClient?.getMediaInfo()
-      eventSink?.success(lastState)
+      // lastState = remoteMediaClient?.mediaInfo
+      // eventSink?.success(remoteMediaClient?.mediaInfo?.metadata)
     }
 }
