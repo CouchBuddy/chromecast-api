@@ -55,7 +55,7 @@ class MediaInfo {
     this.season = data['season'] as int;
     this.seriesTitle = data['seriesTitle'];
     this.subtitles = data['subtitles'] != null
-      ? data['subtitles'].map<TextTrack>((subs) => TextTrack.fromMap(subs)).toList()
+      ? data['subtitles'].map<TextTrack>((subs) => TextTrack.fromMap(Map<String, dynamic>.from(subs))).toList()
       : [];
     this.title = data['title'];
     this.url = Uri.parse(data['url']);
@@ -86,7 +86,9 @@ class TextTrack {
     this.id = data['id'] as int;
     this.lang = data['lang'];
     this.name = data['name'];
-    this.url = Uri.parse(data['url']);
+    this.url = data['url'] != null
+      ? Uri.parse(data['url'])
+      : null;
   }
 
   Map<String, dynamic> toMap() => {

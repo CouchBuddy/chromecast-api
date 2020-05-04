@@ -307,9 +307,11 @@ class MediaStreamHandler : EventChannel.StreamHandler {
           "images" to metadata?.images?.map { it.url.toString() },
           "season" to metadata?.getInt(MediaMetadata.KEY_SEASON_NUMBER),
           "seriesTitle" to metadata?.getString(MediaMetadata.KEY_SERIES_TITLE),
-          "subtitles" to remoteMediaClient?.mediaInfo?.mediaTracks?.map {
-            mapOf("id" to it.id, "name" to it.name, "lang" to it.language)
-          },
+          "subtitles" to remoteMediaClient?.mediaInfo?.mediaTracks?
+            .filter { it.type == MediaTrack.TYPE_TEXT }
+            .map {
+              mapOf("id" to it.id, "name" to it.name, "lang" to it.language, "url" to it.contentId)
+            },
           "title" to metadata?.getString(MediaMetadata.KEY_TITLE),
           "type" to metadata?.getMediaType(),
           "url" to remoteMediaClient?.mediaInfo?.contentId
