@@ -115,3 +115,12 @@ enum MediaMetadataType {
   PHOTO,
   AUDIOBOOK_CHAPTER
 }
+
+enum PlayerState {
+  UNKNOWN,
+  IDLE,
+  PLAYING,
+  PAUSED,
+  BUFFERING,
+  LOADING
+}

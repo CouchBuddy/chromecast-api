@@ -305,7 +305,7 @@ class MediaStreamHandler : EventChannel.StreamHandler {
         val metadata = remoteMediaClient?.mediaInfo?.metadata
         val activeTrackIds = remoteMediaClient?.mediaStatus?.activeTrackIds
 
-        eventSink?.success(if (metadata != null) mapOf(
+        val mediaInfo = if (metadata != null) mapOf(
           "episode" to metadata?.getInt(MediaMetadata.KEY_EPISODE_NUMBER),
           "images" to metadata?.images?.map { it.url.toString() },
           "season" to metadata?.getInt(MediaMetadata.KEY_SEASON_NUMBER),
@@ -324,7 +324,11 @@ class MediaStreamHandler : EventChannel.StreamHandler {
           "title" to metadata?.getString(MediaMetadata.KEY_TITLE),
           "type" to metadata?.getMediaType(),
           "url" to remoteMediaClient?.mediaInfo?.contentId
-        ) else null)
+        ) else null
+
+        eventSink?.success(
+          mapOf("mediaInfo" to mediaInfo, "playerState" to remoteMediaClient?.playerState)
+        )
       }
     }
 
